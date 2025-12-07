@@ -2,141 +2,332 @@
 
 import os
 import requests
-import streamlit as st
 import json
+from typing import Optional, Dict, List, Any
 
-PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
+# Get API key from environment variable
+api_key = os.getenv('PERPLEXITY_API_KEY')
+
+if not api_key:
+    print("⚠️  WARNING: PERPLEXITY_API_KEY environment variable not set")
+    print("Please set it before using AI features:")
+    print("  - Mac/Linux: export PERPLEXITY_API_KEY='your-key'")
+    print("  - Windows: set PERPLEXITY_API_KEY=your-key")
 
 
-def _get_api_key():
-    """Get Perplexity API key from environment"""
-    key = os.getenv("PERPLEXITY_API_KEY")
-    if not key:
-        st.warning("⚠️ PERPLEXITY_API_KEY is not configured. AI features disabled.")
-    return key
-
-
-def call_perplexity(system_prompt: str, user_prompt: str, temperature: float = 0.3, max_tokens: int = 512):
+def call_perplexity(
+    messages: List[Dict[str, str]],
+    temperature: float = 0.5,
+    max_tokens: int = 500
+) -> Dict[str, Any]:
     """
-    Call Perplexity API (sonar-pro model)
+    Call Perplexity API with error handling
     
     Args:
-        system_prompt: System role message
-        user_prompt: User message
-        temperature: Creativity level (0.1-1.0)
-        max_tokens: Max response length
-        
+        messages: List of message dicts with 'role' and 'content'
+        temperature: Creativity level (0.0 - 1.0)
+        max_tokens: Maximum response length
+    
     Returns:
-        str: API response or None if error
+        Response JSON or error dict
     """
-    api_key = _get_api_key()
+    
     if not api_key:
-        return "AI response unavailable - API key not configured."
-
+        return {
+            "error": "API key not configured. Set PERPLEXITY_API_KEY environment variable."
+        }
+    
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     }
-
+    
     payload = {
         "model": "sonar-pro",
+        "messages": messages,
         "temperature": temperature,
-        "max_tokens": max_tokens,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
+        "max_tokens": max_tokens
     }
-
+    
     try:
         response = requests.post(
-            PERPLEXITY_API_URL,
-            json=payload,
+            "https://api.perplexity.ai/chat/completions",
             headers=headers,
-            timeout=30,
+            json=payload,
+            timeout=15
         )
-        response.raise_for_status()
-        data = response.json()
-        content = data["choices"][0]["message"]["content"]
-        return content
-    except requests.exceptions.Timeout:
-        return "⏱️ Request timeout - please try again"
-    except requests.exceptions.RequestException as e:
-        return f"API Error: {str(e)}"
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-
-def analyze_review_sentiment(review_text: str):
-    """
-    Analyze sentiment of review text
+        
+        # Handle different status codes
+        if response.status_code == 401:
+            return {
+                "error": "Unauthorized - Invalid API key. Check your PERPLEXITY_API_KEY"
+            }
+        elif response.status_code == 429:
+            return {
+                "error": "Rate limit exceeded. Please try again later"
+            }
+        elif response.status_code == 500:
+            return {
+                "error": "Perplexity API server error. Try again later"
+            }
+        elif response.status_code != 200:
+            return {
+                "error": f"API Error {response.status_code}: {response.text}"
+            }
+        
+        return response.json()
     
-    Returns: 'positive', 'negative', or 'neutral'
+    except requests.exceptions.Timeout:
+        return {"error": "API request timeout. Please try again"}
+    except requests.exceptions.ConnectionError:
+        return {"error": "Connection error. Check your internet"}
+    except Exception as e:
+        return {"error": f"Unexpected error: {str(e)}"}
+
+
+def analyze_review_sentiment(review_text: str) -> str:
     """
-    system_prompt = (
-        "You are a sentiment analysis expert. Analyze the given text and respond with ONLY "
-        "one word: positive, negative, or neutral. No explanation needed."
-    )
+    Analyze sentiment of a review
+    
+    Args:
+        review_text: The review text to analyze
+    
+    Returns:
+        'positive', 'negative', or 'neutral'
+    """
+    
+    if not review_text or len(review_text) < 3:
+        return "neutral"
+    
+    messages = [
+        {
+            "role": "user",
+            "content": f"""Analyze the sentiment of this review and respond with ONLY one word:
+            
+Review: {review_text}
 
-    user_prompt = f"Analyze sentiment:\n{review_text}"
-
-    result = call_perplexity(system_prompt, user_prompt, temperature=0.1, max_tokens=10)
-
-    if result:
-        sentiment = result.lower().strip()
-        if "positive" in sentiment:
-            return "positive"
-        elif "negative" in sentiment:
-            return "negative"
+Respond with ONLY: positive, negative, or neutral"""
+        }
+    ]
+    
+    response = call_perplexity(messages, temperature=0.1, max_tokens=10)
+    
+    if "error" in response:
+        print(f"Sentiment analysis error: {response['error']}")
+        return "neutral"
+    
+    try:
+        content = response.get('choices', [{}])[0].get('message', {}).get('content', '').lower().strip()
+        
+        # Clean up response
+        content = content.replace('.', '').replace('!', '').replace(',', '')
+        
+        if 'positive' in content:
+            return 'positive'
+        elif 'negative' in content:
+            return 'negative'
         else:
-            return "neutral"
-    return "neutral"
+            return 'neutral'
+    
+    except (KeyError, IndexError, AttributeError):
+        return "neutral"
 
 
-def generate_ai_response(review_text: str, category: str):
+def generate_ai_response(
+    user_message: str,
+    category: str,
+    sentiment: str
+) -> str:
     """
-    Generate a professional AI response to customer feedback
+    Generate a professional AI response to user feedback
+    
+    Args:
+        user_message: The user's feedback message
+        category: Category of feedback
+        sentiment: Detected sentiment (positive/negative/neutral)
+    
+    Returns:
+        AI-generated response string
     """
-    system_prompt = (
-        "You are a helpful customer service representative. Generate a professional, "
-        "empathetic response to the customer feedback. Keep it concise (max 100 words). "
-        "Thank them and address their main concern."
-    )
+    
+    if not user_message or len(user_message) < 5:
+        return "Thank you for your feedback!"
+    
+    tone_map = {
+        'positive': 'enthusiastic and grateful',
+        'negative': 'empathetic and solution-focused',
+        'neutral': 'professional and helpful'
+    }
+    
+    tone = tone_map.get(sentiment, 'professional')
+    
+    messages = [
+        {
+            "role": "user",
+            "content": f"""Generate a short, professional customer service response (max 2 sentences) to this feedback.
+Be {tone}.
 
-    user_prompt = f"Category: {category}\n\nCustomer feedback:\n{review_text}\n\nGenerate a response:"
+Category: {category}
+Customer Feedback: {user_message}
 
-    result = call_perplexity(system_prompt, user_prompt, temperature=0.5, max_tokens=150)
-    return result if result else "Thank you for your feedback!"
+Response:"""
+        }
+    ]
+    
+    response = call_perplexity(messages, temperature=0.5, max_tokens=150)
+    
+    if "error" in response:
+        print(f"Response generation error: {response['error']}")
+        return f"Thank you for your {sentiment} feedback about {category}. We appreciate your input!"
+    
+    try:
+        content = response.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+        
+        # Clean up response
+        if content:
+            return content[:200]  # Limit to 200 chars
+        else:
+            return "Thank you for your feedback!"
+    
+    except (KeyError, IndexError, AttributeError):
+        return "Thank you for your feedback!"
 
 
-def generate_summary(review_text: str):
+def generate_summary(review_text: str) -> str:
     """
-    Generate a brief AI summary of the review
+    Generate a one-sentence summary of a review
+    
+    Args:
+        review_text: The review text to summarize
+    
+    Returns:
+        One-sentence summary
     """
-    system_prompt = (
-        "You are a summarization expert. Create a very brief one-sentence summary of the "
-        "given customer review. Focus on the main point. Max 20 words."
-    )
+    
+    if not review_text or len(review_text) < 5:
+        return "Short feedback received"
+    
+    messages = [
+        {
+            "role": "user",
+            "content": f"""Summarize this feedback in exactly one sentence (under 15 words):
 
-    user_prompt = f"Review:\n{review_text}\n\nGenerate summary:"
+Feedback: {review_text}
 
-    result = call_perplexity(system_prompt, user_prompt, temperature=0.2, max_tokens=50)
-    return result if result else "Customer feedback received"
+Summary:"""
+        }
+    ]
+    
+    response = call_perplexity(messages, temperature=0.2, max_tokens=50)
+    
+    if "error" in response:
+        print(f"Summary generation error: {response['error']}")
+        return review_text[:50] + "..." if len(review_text) > 50 else review_text
+    
+    try:
+        content = response.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+        
+        # Clean up response
+        content = content.replace('Summary: ', '').replace('Summary:', '')
+        
+        if content:
+            return content[:100]  # Limit to 100 chars
+        else:
+            return review_text[:50]
+    
+    except (KeyError, IndexError, AttributeError):
+        return review_text[:50]
 
 
-def generate_recommendations(review_text: str, category: str, sentiment: str):
+def generate_recommendations(
+    review_text: str,
+    category: str,
+    sentiment: str
+) -> str:
     """
-    Generate recommended actions based on feedback
+    Generate actionable recommendations based on feedback
+    
+    Args:
+        review_text: The review text
+        category: Category of feedback
+        sentiment: Detected sentiment
+    
+    Returns:
+        Recommended action for the team
     """
-    system_prompt = (
-        "You are a business analyst. Based on the customer feedback, suggest ONE actionable "
-        "recommendation for the team. Be specific and practical. Max 30 words."
-    )
+    
+    if not review_text or len(review_text) < 5:
+        return "Monitor feedback quality"
+    
+    action_prompt = {
+        'negative': 'What specific action should the team take to address this issue?',
+        'positive': 'How can we maintain or build on this positive experience?',
+        'neutral': 'How could we improve based on this feedback?'
+    }
+    
+    prompt = action_prompt.get(sentiment, 'How should we respond to this feedback?')
+    
+    messages = [
+        {
+            "role": "user",
+            "content": f"""Based on this customer feedback, provide ONE actionable recommendation (max 1 sentence).
 
-    user_prompt = (
-        f"Category: {category}\nSentiment: {sentiment}\n\nFeedback:\n{review_text}\n\n"
-        "Recommend action:"
-    )
+Category: {category}
+Sentiment: {sentiment}
+Feedback: {review_text}
 
-    result = call_perplexity(system_prompt, user_prompt, temperature=0.4, max_tokens=80)
-    return result if result else "Follow up with customer"
+{prompt}
+
+Recommendation:"""
+        }
+    ]
+    
+    response = call_perplexity(messages, temperature=0.4, max_tokens=80)
+    
+    if "error" in response:
+        print(f"Recommendation generation error: {response['error']}")
+        
+        # Return smart fallback based on sentiment
+        if sentiment == 'negative':
+            return "Investigate and resolve the reported issue"
+        elif sentiment == 'positive':
+            return "Document and replicate this successful approach"
+        else:
+            return "Analyze feedback for potential improvements"
+    
+    try:
+        content = response.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+        
+        # Clean up response
+        content = content.replace('Recommendation: ', '').replace('Recommendation:', '')
+        
+        if content:
+            return content[:150]  # Limit to 150 chars
+        else:
+            return "Review and act on feedback"
+    
+    except (KeyError, IndexError, AttributeError):
+        return "Review and act on feedback"
+
+
+def test_api_connection() -> bool:
+    """
+    Test if API key is valid and working
+    
+    Returns:
+        True if API is reachable, False otherwise
+    """
+    
+    if not api_key:
+        print("❌ API key not configured")
+        return False
+    
+    messages = [{"role": "user", "content": "Hello"}]
+    response = call_perplexity(messages, temperature=0.1, max_tokens=5)
+    
+    if "error" in response:
+        print(f"❌ API Error: {response['error']}")
+        return False
+    
+    print("✅ API Connection Successful")
+    return True
