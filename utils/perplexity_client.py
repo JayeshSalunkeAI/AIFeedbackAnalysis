@@ -136,15 +136,16 @@ Respond with ONLY: positive, negative, or neutral"""
 def generate_ai_response(
     user_message: str,
     category: str,
-    sentiment: str
+    sentiment: Optional[str] = None
 ) -> str:
     """
     Generate a professional AI response to user feedback
+    AUTO-DETECTS SENTIMENT if not provided
     
     Args:
         user_message: The user's feedback message
         category: Category of feedback
-        sentiment: Detected sentiment (positive/negative/neutral)
+        sentiment: Detected sentiment (optional - will be auto-detected if not provided)
     
     Returns:
         AI-generated response string
@@ -152,6 +153,10 @@ def generate_ai_response(
     
     if not user_message or len(user_message) < 5:
         return "Thank you for your feedback!"
+    
+    # AUTO-DETECT SENTIMENT if not provided
+    if sentiment is None:
+        sentiment = analyze_review_sentiment(user_message)
     
     tone_map = {
         'positive': 'enthusiastic and grateful',
@@ -242,15 +247,16 @@ Summary:"""
 def generate_recommendations(
     review_text: str,
     category: str,
-    sentiment: str
+    sentiment: Optional[str] = None
 ) -> str:
     """
     Generate actionable recommendations based on feedback
+    AUTO-DETECTS SENTIMENT if not provided
     
     Args:
         review_text: The review text
         category: Category of feedback
-        sentiment: Detected sentiment
+        sentiment: Detected sentiment (optional - will be auto-detected if not provided)
     
     Returns:
         Recommended action for the team
@@ -258,6 +264,10 @@ def generate_recommendations(
     
     if not review_text or len(review_text) < 5:
         return "Monitor feedback quality"
+    
+    # AUTO-DETECT SENTIMENT if not provided
+    if sentiment is None:
+        sentiment = analyze_review_sentiment(review_text)
     
     action_prompt = {
         'negative': 'What specific action should the team take to address this issue?',
