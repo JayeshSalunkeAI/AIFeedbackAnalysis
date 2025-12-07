@@ -26,59 +26,6 @@ A production-ready two-dashboard AI-powered feedback system deployed on Render u
 - **AI API**: Perplexity (sonar-pro)
 - **Deployment**: Render
 
-## 🚀 Quick Start
-
-### Local Development
-
-```bash
-# 1. Clone repository
-git clone https://github.com/YOUR_USERNAME/ai-feedback-system.git
-cd ai-feedback-system
-
-# 2. Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Set up environment variable
-export PERPLEXITY_API_KEY="your-key-here"  # Windows: set PERPLEXITY_API_KEY=...
-
-# 5. Run locally
-streamlit run app.py
-
-# 6. Open browser to http://localhost:8501
-```
-
-### Deploy to Render
-
-1. Push to GitHub
-2. Go to https://render.com
-3. Create new Web Service
-4. Configure:
-   - **Build**: `pip install -r requirements.txt`
-   - **Start**: `streamlit run app.py --server.port 10000 --server.address 0.0.0.0`
-   - **Env**: `PERPLEXITY_API_KEY = your-key`
-5. Deploy!
-
-## 📁 Project Structure
-
-```
-ai-feedback-system/
-├── app.py                          # Main application
-├── requirements.txt                # Dependencies
-├── runtime.txt                     # Python version
-├── .gitignore
-├── README.md
-├── utils/
-│   ├── __init__.py
-│   ├── database.py                # SQLite management
-│   ├── perplexity_client.py       # API integration
-│   └── analytics.py               # Analytics functions
-└── data/
-    └── .gitkeep                   # Database folder
-```
 
 ## 🎯 Key Endpoints
 
@@ -197,9 +144,6 @@ Verify Start Command includes: --server.port 10000 --server.address 0.0.0.0
 
 This project is open source and available under the MIT License.
 
-## 👨‍💻 Author
-
-Built as Task 2 submission for AI Feedback System assignment.
 
 ---
 
@@ -207,4 +151,3 @@ Built as Task 2 submission for AI Feedback System assignment.
 **Status**: ✅ Production Ready  
 **Last Updated**: December 2025
 
-Made with ❤️ for the AI/ML community
