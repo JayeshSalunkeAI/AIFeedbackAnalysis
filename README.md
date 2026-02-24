@@ -104,9 +104,6 @@ CREATE TABLE feedback (
 | `runtime.txt` | Python version specification |
 
 
-## 📄 License
-
-This project is open source and available under the MIT License.
 
 
 ---
